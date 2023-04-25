@@ -69,6 +69,22 @@ class SetupView(discord.ui.View):
         self.game.start()
         view = ViewInv()
         await interaction.response.send_message(f"The game has begun! Please use `/inventory` and `/create`. Current Turn: {self.game.current_turn.mention}", view=view)
+        await handle_game_loop(self.game, interaction.channel)
+
+async def handle_game_loop(game, channel):
+    while game.running:
+        c = game.current_turn
+        for i in range(25):
+            await asyncio.sleep(1)
+            if game.current_turn != c:
+                break
+
+        if game.current_turn == c:
+            game.next_turn()
+            view = ViewInv()
+            await channel.send(f"{c.mention} failed to do anything in 25 seconds. Next Turn: {game.current_turn.mention}", view=view)
+
+    await channel.send(f"The game is over! The winner is {game.winner.mention}!")
 
 def display_inventory(inventory):
     s = ""
@@ -80,7 +96,7 @@ def display_inventory(inventory):
 class ViewInv(discord.ui.View):
     def __init__(self):
         super().__init__()
-
+        
     @discord.ui.button(label="View Inventory", emoji='🔬', style=discord.ButtonStyle.blurple)
     async def inv_button_callback(self, button, interaction):
         game = games[interaction.guild.id] 
@@ -124,7 +140,7 @@ async def leaderboard(ctx):
     game = games[ctx.guild.id] 
 
     embed = discord.Embed(title="Inorganic Clash of Chem Leaderboard!", color=discord.Color.gold())
-    for x,y in dict(sorted(game.leaderboard.items(), key=lambda item: item[1], reverse=True)).items():
+    for x,y in game.sorted_leaderboard.items():
         embed.add_field(name=x.name, value=f"{y} points", inline=False)
     embed.set_thumbnail(url=random_chem_gif())
     await ctx.respond(embed=embed)
@@ -172,7 +188,6 @@ async def create(ctx, compound: str):
         return await ctx.respond(f"It's not your turn at the moment. Please wait for {game.current_turn} to play.", ephemeral=True)
     try:
         view = ViewInv()
-        next_turn = None
         if compound.upper() == "PASS":
             game.next_turn()
             next_turn = game.current_turn
@@ -189,15 +204,6 @@ async def create(ctx, compound: str):
 
             await ctx.respond(text, view=view)
 
-        while True:
-            await asyncio.sleep(25)
-            if game.current_turn == next_turn:
-                game.next_turn()
-                prev = next_turn
-                next_turn = game.current_turn
-                await ctx.channel.send(f"{prev.mention} failed to create a compound in 25 seconds. Next Turn: {next_turn.mention}", view=view)
-                continue
-            break
 
     except Exception as e:
         return await ctx.respond(str(e), ephemeral=True)
@@ -231,16 +237,6 @@ async def sabotage(ctx, player: discord.Member):
     game.next_turn()
     next_turn = game.current_turn
     await ctx.respond(f"{ctx.author.mention} entered {player.mention}'s lab and sabotaged their inventory. Next turn: {next_turn.mention}", view=view)
-
-    while True:
-        await asyncio.sleep(25)
-        if game.current_turn == next_turn:
-            game.next_turn()
-            prev = next_turn
-            next_turn = game.current_turn
-            await ctx.channel.send(f"{prev.mention} failed to create a compound in 25 seconds. Next Turn: {next_turn.mention}", view=view)
-            continue
-        break
 
 
 @bot.command()
@@ -276,16 +272,6 @@ async def react(ctx, compound1: str, compound2: str):
         text += f"\nNext Turn: {next_turn.mention}"
         
         await ctx.respond(text, view=view)
-
-        while True:
-            await asyncio.sleep(25)
-            if game.current_turn == next_turn:
-                game.next_turn()
-                prev = next_turn
-                next_turn = game.current_turn
-                await ctx.channel.send(f"{prev.mention} failed to create a compound in 25 seconds. Next Turn: {next_turn.mention}", view=view)
-                continue
-            break
 
     except Exception as e:
         return await ctx.respond(str(e), ephemeral=True)
